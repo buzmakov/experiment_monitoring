@@ -5,6 +5,7 @@ import fnmatch
 import datetime
 import warnings
 import pyfits
+import cPickle as pickle
 
 warnings.filterwarnings("ignore", category=Warning)
 
@@ -14,16 +15,29 @@ app.config['ROOT_DIR'] = r'/home/makov/tmp/tomo_root/Raw/2012_10_22/bone_Cu15x10
 app.config['FILES_LIST'] = []
 app.config['FILES_INFO'] = {}
 
+pickle_file_name = 'preload.bin'
+if os.path.exists(pickle_file_name):
+    with open(pickle_file_name, 'r') as pf:
+        app.config['FILES_INFO'] = pickle.load(pf)
+
 
 @app.route('/')
 def index():
+    data = get_data()
+    return render_template('index.html', data=data)
+
+
+def get_data():
     update_files_list(app.config['ROOT_DIR'], app.config['FILES_LIST'])
     update_files_info(app.config['FILES_LIST'], app.config['FILES_INFO'])
     file_list = sorted(app.config['FILES_INFO'].iteritems(), key=lambda (k, v): v['mtime'])
-    sub_list = file_list[100:]
+    sub_list = file_list[:]
     for file_name, info in sub_list:
         if not 'intens' in info:
             info['intens'] = get_file_intensity(file_name)
+
+    with open(pickle_file_name, 'w') as pf:
+        pickle.dump(app.config['FILES_INFO'], pf)
 
     data = []
     current_group = None
@@ -36,11 +50,10 @@ def index():
             data.append({'label': current_group, 'data': current_series})
             current_group = group_name
             current_series = []
-        current_series.append((info['mtime']*1000+14400000, info['intens']))
+        current_series.append((info['mtime'] * 1000 + 14400000, info['intens']))
     else:
         data.append({'label': current_group, 'data': current_series})
-
-    return render_template('index.html', data=data)
+    return data
 
 
 def update_files_list(root_dir, files_list):
@@ -82,7 +95,7 @@ def get_frame_from_file(file_path):
 
 def get_file_intensity(file_path):
     data = get_frame_from_file(file_path)
-    return data.sum()/(np.prod(data.shape))
+    return data.sum() / (np.prod(data.shape))
 
 
 def get_group_name(file_path):
